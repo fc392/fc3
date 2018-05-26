@@ -156,7 +156,11 @@ public class BPlusTree {
      */
     public Optional<RecordId> get(DataBox key) {
       typecheck(key);
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
+      if(root instanceof InnerNode){
+    	  return ((InnerNode) root).get(key).getKey(key);
+      }else{
+    	  return ((LeafNode) root).getKey(key);
+      }
     }
 
     /**
@@ -203,9 +207,20 @@ public class BPlusTree {
      * leaves of the B+ tree. Solutions that materialize all record ids in
      * memory will receive 0 points.
      */
-    public Iterator<RecordId> scanAll() {
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
-      // TODO(hw2): Return a BPlusTreeIterator.
+    public Iterator<RecordId> scanAll() {   
+    	if(root instanceof LeafNode){
+    		return ((LeafNode) root).getRids().iterator();
+    	}else{
+    		ArrayList<RecordId> l = new ArrayList<>();
+    		LeafNode temp = ((InnerNode) root).getLeftmostLeaf();
+    		while(true){
+    			l.addAll(temp.getRids());
+    			temp = temp.getRightSibling().map(u->u).orElse(null);
+    			if(temp == null) break;
+    		}
+    		return l.iterator();
+    	}
+
     }
 
     /**
@@ -234,7 +249,21 @@ public class BPlusTree {
      */
     public Iterator<RecordId> scanGreaterEqual(DataBox key) {
       typecheck(key);
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
+      if(root instanceof LeafNode){
+    	  return ((LeafNode) root).scanGreaterEqual(key);
+      }else{
+    	  List<RecordId> l = new ArrayList<>();
+    	  
+    	  LeafNode tempNode = ((InnerNode) root).get(key);
+    	  int index = InnerNode.numLessThan(key, tempNode.getKeys());
+    	  l.addAll(tempNode.getRids().subList(index, tempNode.getRids().size()));
+    	  
+    	  while(tempNode.getRightSibling().isPresent()){
+    		  tempNode = tempNode.getRightSibling().get();
+    		  l.addAll(tempNode.getRids());
+    	  }
+    	  return l.iterator();
+      }
       // TODO(hw2): Return a BPlusTreeIterator.
     }
 
@@ -250,7 +279,17 @@ public class BPlusTree {
      */
     public void put(DataBox key, RecordId rid) throws BPlusTreeException {
       typecheck(key);
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
+      Optional<Pair<DataBox, Integer>> tempPair = root.put(key, rid);
+      if (tempPair.isPresent()){
+    	  List<DataBox> tempKeys = new ArrayList<>();
+    	  List<Integer> tempChildren = new ArrayList<>();
+    	  tempKeys.add(tempPair.get().getFirst());
+    	  tempChildren.add(root.getPage().getPageNum());
+    	  tempChildren.add(tempPair.get().getSecond());
+    	  root = new InnerNode(metadata,tempKeys,tempChildren);
+      }
+      ByteBuffer buf = headerPage.getByteBuffer();
+      writeHeader(buf);
     }
 
     /**
@@ -269,7 +308,20 @@ public class BPlusTree {
      * bulkLoad (see comments in BPlusNode.bulkLoad).
      */
     public void bulkLoad(Iterator<Pair<DataBox, RecordId>> data, float fillFactor) throws BPlusTreeException {
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
+    	Optional<Pair<DataBox, Integer>> tempPair;
+    	while(true){
+    		tempPair = root.bulkLoad(data, fillFactor);
+    		if (tempPair.isPresent()){
+    	      	  List<DataBox> tempKeys = new ArrayList<>();
+    	      	  List<Integer> tempChildren = new ArrayList<>();
+    	      	  tempKeys.add(tempPair.get().getFirst());
+    	      	  tempChildren.add(root.getPage().getPageNum());
+    	      	  tempChildren.add(tempPair.get().getSecond());
+    	      	  root = new InnerNode(metadata,tempKeys,tempChildren);
+    	      	  if(!data.hasNext()) break;
+    	    }else break;
+    	}
+
     }
 
     /**
@@ -286,7 +338,7 @@ public class BPlusTree {
      */
     public void remove(DataBox key) {
       typecheck(key);
-      throw new UnsupportedOperationException("TODO(hw2): implement.");
+      root.remove(key);
     }
 
     // Helpers /////////////////////////////////////////////////////////////////

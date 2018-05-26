@@ -70,20 +70,71 @@ class InnerNode extends BPlusNode {
   // See BPlusNode.get.
   @Override
   public LeafNode get(DataBox key) {
-    throw new UnsupportedOperationException("TODO(hw2): implement.");
+	int index = numLessThanEqual(key,keys);
+	BPlusNode temp = getChild(index);
+	if (temp instanceof InnerNode){
+		return ((InnerNode) temp).get(key);
+	}
+	return (LeafNode)temp;
   }
 
   // See BPlusNode.getLeftmostLeaf.
   @Override
   public LeafNode getLeftmostLeaf() {
-    throw new UnsupportedOperationException("TODO(hw2): implement.");
+	  BPlusNode temp = getChild(0);
+	  while(temp instanceof InnerNode){
+		  temp = ((InnerNode) temp).getChild(0);
+	  }
+	  return (LeafNode)temp;
   }
 
   // See BPlusNode.put.
+  // get LeafNode
+  // insert LeafNode--> full? Y-> partition-> middle insert to the parent inner node
+  //                                 while -> parent inner node full? Y-> partition + repeat
+  //                                                                  N-> insert directly
+  //                          N-> insert directly
   @Override
   public Optional<Pair<DataBox, Integer>> put(DataBox key, RecordId rid)
       throws BPlusTreeException {
-    throw new UnsupportedOperationException("TODO(hw2): implement.");
+	  int index = numLessThanEqual(key, keys);
+	  BPlusNode targetNode = getChild(index);
+	  Optional<Pair<DataBox, Integer>> newPair = targetNode.put(key, rid);
+	  
+	  if (newPair.isPresent()){
+		  DataBox middleKey = newPair.get().getFirst();
+		  int childPage = newPair.get().getSecond();
+		  int order = metadata.getOrder();
+		  //Repeat
+		  
+		  if(keys.size() > index && keys.get(index).equals(key)){
+			  //Duplicate keys
+			  throw new BPlusTreeException("Duplicate key!");
+		  }else{
+			  keys.add(index, middleKey);
+			  children.add(index + 1, childPage);
+			  if(keys.size() > 2 * order){
+				  //partition
+				  //create new InnerNode only Contains One, push middle up
+				  //new InnerNode's Left point to new LeafNode, 
+				  List<DataBox> rightKeys  = keys.subList(order + 1, order * 2 + 1);
+				  List<Integer> rightChildren = children.subList(order + 1, order * 2 + 2);
+				  DataBox middle = keys.get(order);
+				  keys = keys.subList(0, order);
+				  children = children.subList(0, order + 1);
+				  InnerNode newInnerNode = new InnerNode(metadata, rightKeys, rightChildren);
+				  int newPageNum = newInnerNode.getPage().getPageNum();
+				  sync();//safe?
+				  return Optional.of(new Pair<DataBox, Integer> (middle, newPageNum)); 				  
+			  }else{
+				  sync();
+				  return Optional.empty();
+			  }
+		  }		  
+	  }else{
+		  return Optional.empty();
+	  }
+	  //
   }
 
   // See BPlusNode.bulkLoad.
@@ -91,13 +142,41 @@ class InnerNode extends BPlusNode {
   public Optional<Pair<DataBox, Integer>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
                                                    float fillFactor)
       throws BPlusTreeException {
-    throw new UnsupportedOperationException("TODO(hw2): implement.");
+	  int fillNum = Math.round(metadata.getOrder()* 2 * fillFactor) ;
+	  BPlusNode rightMost = getChild(children.size() - 1);
+	  while(true){
+		  Optional<Pair<DataBox, Integer>> tempPair = rightMost.bulkLoad(data, fillFactor);
+		  if(tempPair.isPresent()){
+			  DataBox tempKey = tempPair.get().getFirst();
+			  int tempChild = tempPair.get().getSecond();
+			  if(keys.size() == fillNum){
+				  List<DataBox> tempKeys = new ArrayList<>();
+				  List<Integer> tempChildren = new ArrayList<>();
+				  tempKeys.add(tempKey);
+				  tempChildren.add(tempChild);
+				  InnerNode newInnerNode = new InnerNode(metadata, tempKeys, tempChildren);
+				  int newPageNum = newInnerNode.getPage().getPageNum();
+				  sync();
+				  return Optional.of(new Pair<>(tempKey, newPageNum));
+			  }else{
+				  keys.add(tempKey);
+				  children.add(tempChild);
+			  }
+			  //go on?
+			  if(data.hasNext()){
+				  rightMost = getChild(children.size() - 1);
+			  }else break;
+			  
+		  }else break;
+	  }
+	  sync();
+	  return Optional.empty();
   }
 
   // See BPlusNode.remove.
   @Override
   public void remove(DataBox key) {
-    throw new UnsupportedOperationException("TODO(hw2): implement.");
+	  get(key).remove(key);
   }
 
   // Helpers ///////////////////////////////////////////////////////////////////

@@ -356,8 +356,9 @@ public class TestBPlusTree {
           BPlusTree tree = getBPlusTree(Type.intType(), d);
           for (int i = 0; i < keys.size(); ++i) {
             tree.put(keys.get(i), rids.get(i));
+//           tree.toDotPDFFile(Integer.toString(i) + ".pdf");
           }
-
+          tree.toDotPDFFile("zzz.pdf");
           // Test get.
           for (int i = 0; i < keys.size(); ++i) {
             assertEquals(Optional.of(rids.get(i)), tree.get(keys.get(i)));
