@@ -11,3 +11,4 @@ src/.idea/*
 # Ignore dot/pdf used in debugging
 *.dot
 *.pdf
+/target/
