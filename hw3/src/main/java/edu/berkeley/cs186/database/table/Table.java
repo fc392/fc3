@@ -436,30 +436,72 @@ public class Table implements Iterable<Record>, Closeable {
    */
   public class RIDPageIterator implements BacktrackingIterator<RecordId> {
     //member variables go here
-
+	  private byte[] bitmap;
+	  private int pageNum;
+	  private short markedEntryNum;	  
+	  private short prevEntryNum = -1;
+	  private short nextEntryNum = -1;
+	  
     /**
      * The following method signature is provided for guidance, but not necessary. Feel free to
      * implement your own solution using whatever helper methods you would like.
      */
 
     public RIDPageIterator(Page page) {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	this.bitmap = getBitMap(page);
+    	this.pageNum = page.getPageNum();
+    	this.markedEntryNum = -1;
+    	 try {
+             fetchNextEntryNum();
+           } catch (DatabaseException e) {
+             this.nextEntryNum= -1;
+           }
+    }	
+    
+    private void fetchNextEntryNum() throws DatabaseException{
+    	short currentEntryNum = this.nextEntryNum;
+    	this.nextEntryNum = -1;
+    	for(currentEntryNum++;currentEntryNum < 8*bitmap.length; currentEntryNum++){
+    		if(Bits.getBit(bitmap, currentEntryNum) == Bits.Bit.ONE){
+    			this.nextEntryNum = currentEntryNum;
+    			return;
+    		}
+    	}
+    	throw new DatabaseException("All done!");
     }
-
+    
+    
     public boolean hasNext() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	return this.nextEntryNum != -1;
     }
 
     public RecordId next() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	this.prevEntryNum = this.nextEntryNum;
+    	if (!this.hasNext()) {
+            throw new NoSuchElementException();
+          }
+          short entryNum = this.nextEntryNum;
+          try {
+            this.fetchNextEntryNum();
+          } catch (DatabaseException e) {
+            this.nextEntryNum = -1;
+          }
+          return new RecordId(pageNum, entryNum);    	
     }
 
     public void mark() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	if (this.prevEntryNum == -1) {
+            return;
+          }
+        this.markedEntryNum = this.prevEntryNum;
     }
 
     public void reset() {
-      throw new UnsupportedOperationException("hw3: TODO");
+        if (this.markedEntryNum == -1) {
+            return;
+          }
+    	this.prevEntryNum = -1;
+    	this.nextEntryNum = this.markedEntryNum;
     }
   }
 
@@ -520,8 +562,12 @@ public class Table implements Iterable<Record>, Closeable {
 
     public RIDBlockIterator(BacktrackingIterator<Page> block) {
       this.block = block;
-      throw new UnsupportedOperationException("hw3: TODO"); //if you want to add anything to this constructor, feel free to
-
+      if (block.hasNext()) this.blockIter = new RIDPageIterator(block.next());
+      try {
+          fetchNextRecord();
+        } catch (DatabaseException e) {
+          this.nextRecordId = null;
+        }
     }
 
     /**
@@ -557,12 +603,38 @@ public class Table implements Iterable<Record>, Closeable {
       this(new ArrayBacktrackingIterator(pages));
     }
 
+    
+    private void fetchNextRecord() throws DatabaseException{
+    	if(blockIter == null) throw new DatabaseException("No new record to fetch");
+    	this.nextRecordId = null;
+    	if(!blockIter.hasNext() && block.hasNext()){
+    		blockIter = new RIDPageIterator(block.next());
+    	}
+    	if(blockIter.hasNext()){
+			this.nextRecordId = blockIter.next();
+    	}else{
+    		throw new DatabaseException("All Done");
+    	}
+    	
+    }
+    
     public boolean hasNext() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	return this.nextRecordId != null;
     }
 
     public RecordId next() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	this.prevRecordId = this.nextRecordId;
+    	if (!this.hasNext()) {
+            throw new NoSuchElementException();
+          }
+
+          RecordId nextRecordId = this.nextRecordId;
+          try {
+            this.fetchNextRecord();
+          } catch (DatabaseException e) {
+            this.nextRecordId = null;
+          }
+          return nextRecordId;
     }
 
     /**

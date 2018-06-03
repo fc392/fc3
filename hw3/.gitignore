@@ -8,3 +8,4 @@ src/.idea/*
 *.iml
 # Ignore all OSX hidden files
 *.DS_Store
+/target/

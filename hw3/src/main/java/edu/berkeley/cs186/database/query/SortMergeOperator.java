@@ -50,19 +50,108 @@ public class SortMergeOperator extends JoinOperator {
     * You're free to use these member variables, but you're not obligated to.
     */
 
-    // private String leftTableName;
-    // private String rightTableName;
-    // private RecordIterator leftIterator;
-    // private RecordIterator rightIterator;
-    // private Record leftRecord;
-    // private Record nextRecord;
-    // private Record rightRecord;
-    // private boolean marked;
-
+     private String leftTableName;
+     private String rightTableName;
+     private RecordIterator leftIterator;
+     private RecordIterator rightIterator;
+     private Record leftRecord;
+     private Record nextRecord;
+     private Record rightRecord;
+     private boolean marked;
+     private boolean completed;
+     private LR_RecordComparator LRcomparator;
+     
     public SortMergeIterator() throws QueryPlanException, DatabaseException {
       super();
-      throw new UnsupportedOperationException("hw3: TODO");
+      this.leftTableName = new SortOperator(SortMergeOperator.this.getTransaction(),getLeftTableName(), new LeftRecordComparator()).sort();
+      this.rightTableName = new SortOperator(SortMergeOperator.this.getTransaction(),getRightTableName(), new RightRecordComparator()).sort();
+      this.leftIterator = SortMergeOperator.this.getRecordIterator(leftTableName);
+      this.rightIterator = SortMergeOperator.this.getRecordIterator(rightTableName);
+      this.leftRecord = this.leftIterator.hasNext()? this.leftIterator.next():null;
+      this.rightRecord = this.rightIterator.hasNext()? this.rightIterator.next():null;
+      this.marked = false;
+      this.completed = false;
+      this.LRcomparator = new LR_RecordComparator();
+      try {
+          fetchNextRecord();
+        } catch (DatabaseException e) {
+          this.nextRecord = null;
+        }
     }
+    
+    private boolean nextRightRecord(){
+    	if(this.rightIterator.hasNext()){
+			this.rightRecord = this.rightIterator.next();
+			return true;
+		} else completed = true;
+    	return false;
+    }
+    
+    private boolean nextLeftRecord(){
+    	this.marked = false;
+    	if(this.leftIterator.hasNext()){
+			this.leftRecord = this.leftIterator.next();
+			return true;
+		} else completed = true;
+    	return false;
+    }
+    
+    
+    private void UpdateNextRecord(){
+    	List<DataBox> leftValues = new ArrayList<>(this.leftRecord.getValues());
+        List<DataBox> rightValues = new ArrayList<>(rightRecord.getValues());
+        leftValues.addAll(rightValues);
+        this.nextRecord = new Record(leftValues);
+    }
+    
+    private void resetRightRecord(){
+    	this.rightIterator.reset();
+		this.rightRecord = this.rightIterator.next();
+    }
+    
+    /* 
+     * marked?
+     * 	Y: L < R?
+     * 		Y:R-reset, R-next, L-next, marked = false,
+     * 		N:new nextRecord, R-next
+     * 	N: 
+     * 		L == R: R-marked, marked = true, new nextRecord, R-next
+     * 		L < R : L-next = L->hasNext()? L->next:null 
+     * 		L > R : R-next = R->hasNext()? R->next:null 
+     * 
+     */
+    
+    
+    private void fetchNextRecord() throws DatabaseException {
+        if (this.leftRecord == null || this.rightRecord == null) throw new DatabaseException("No new record to fetch");
+        this.nextRecord = null;
+        if(completed) throw new DatabaseException ("all Done!");
+        do{
+        	if(marked){
+        		if (LRcomparator.compare(leftRecord, rightRecord) < 0){
+        			resetRightRecord();
+        			nextLeftRecord();
+        		} else{
+        			UpdateNextRecord();
+        			if(!nextRightRecord()){
+        				completed = false;
+        				if(nextLeftRecord()) resetRightRecord();
+        			}
+        		}
+        	} else if(LRcomparator.compare(leftRecord, rightRecord) == 0) {        		
+        		UpdateNextRecord(); 	          	
+        		if(rightIterator.hasNext()){
+        			rightIterator.mark();
+        			rightRecord = rightIterator.next();
+        			marked = true;
+        		} else nextLeftRecord();        		 		
+        	} else if(LRcomparator.compare(leftRecord, rightRecord) < 0) {
+        		nextLeftRecord();
+        	} else if(LRcomparator.compare(leftRecord, rightRecord) > 0) {
+        		nextRightRecord();
+        	}
+        }while(!hasNext());
+      }
 
     /**
      * Checks if there are more record(s) to yield
@@ -70,7 +159,7 @@ public class SortMergeOperator extends JoinOperator {
      * @return true if this iterator has another record to yield, otherwise false
      */
     public boolean hasNext() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	return this.nextRecord != null;
     }
 
     /**
@@ -80,7 +169,17 @@ public class SortMergeOperator extends JoinOperator {
      * @throws NoSuchElementException if there are no more Records to yield
      */
     public Record next() {
-      throw new UnsupportedOperationException("hw3: TODO");
+    	if (!this.hasNext()) {
+            throw new NoSuchElementException();
+          }
+
+          Record nextRecord = this.nextRecord;
+          try {
+            this.fetchNextRecord();
+          } catch (DatabaseException e) {
+            this.nextRecord = null;
+          }
+          return nextRecord;
     }
 
     public void remove() {

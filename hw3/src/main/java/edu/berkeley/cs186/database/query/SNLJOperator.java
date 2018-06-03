@@ -77,7 +77,7 @@ public class SNLJOperator extends JoinOperator {
      * There is always a first record. If there were no first records (empty rightSource)
      * then the code would not have made it this far. See line 69.
      */
-    private void resetRightRecord(){
+    private void resetRightRecord() throws DatabaseException{
       this.rightIterator.reset();
       assert(rightIterator.hasNext());
       rightRecord = rightIterator.next();
@@ -121,7 +121,7 @@ public class SNLJOperator extends JoinOperator {
           nextLeftRecord();
           resetRightRecord();
         }
-      } while (!hasNext());
+      } while (!hasNext());//find the first nextRecord and stop!
     }
 
     /**
